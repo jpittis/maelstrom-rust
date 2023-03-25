@@ -1,0 +1,6 @@
+/target
+/Cargo.lock
+maelstrom-rust/target
+maelstrom-rust/Cargo.lock
+maelstrom-rust-derive/target
+maelstrom-rust-derive/Cargo.lock

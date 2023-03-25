@@ -1,0 +1,6 @@
+[workspace]
+
+members = [
+    "maelstrom-rust",
+    "maelstrom-rust-derive",
+]
