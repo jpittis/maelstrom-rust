@@ -29,6 +29,20 @@ pub struct Message<T> {
     pub body: Body<T>,
 }
 
+impl<T> Message<T> {
+    fn from_raw(raw: RawMessage, payload: T) -> Message<T> {
+        Message {
+            src: raw.src,
+            dest: raw.dest,
+            body: Body {
+                msg_id: raw.body.msg_id,
+                in_reply_to: raw.body.in_reply_to,
+                payload,
+            },
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Clone)]
 pub struct Body<T> {
     pub msg_id: Option<usize>,
@@ -60,7 +74,7 @@ where
 
     pub fn register<F, T, Q>(&mut self, mut handler: F)
     where
-        F: FnMut(S, T) -> Q + 'static,
+        F: FnMut(S, Message<T>) -> Q + 'static,
         T: Payload,
         Q: Payload,
     {
@@ -69,8 +83,9 @@ where
         let wrapper = Box::new(move |state: S, raw_req: RawMessage| {
             let mut raw_rep = raw_req.clone();
             let payload_req =
-                serde_json::from_value(serde_json::Value::Object(raw_req.body.payload)).unwrap();
-            let payload_rep = handler(state, payload_req);
+                serde_json::from_value(serde_json::Value::Object(raw_req.body.payload.clone()))
+                    .unwrap();
+            let payload_rep = handler(state, Message::from_raw(raw_req, payload_req));
             let raw_payload_rep = to_json_map(payload_rep);
             raw_rep.body.payload = raw_payload_rep;
             raw_rep.body.r#type = qtag.to_string();
@@ -126,7 +141,8 @@ mod test {
         text: String,
     }
 
-    fn handle_echo(_: (), echo: Echo) -> EchoOk {
+    fn handle_echo(_: (), msg: Message<Echo>) -> EchoOk {
+        let echo = msg.body.payload;
         EchoOk { text: echo.text }
     }
 

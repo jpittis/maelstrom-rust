@@ -1,4 +1,4 @@
-use maelstrom_rust::{Payload, Router};
+use maelstrom_rust::{Message, Payload, Router};
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
 
@@ -11,7 +11,8 @@ pub struct Init {
 #[derive(Serialize, Deserialize, Payload)]
 pub struct InitOk {}
 
-fn handle_init(state: Arc<State>, init: Init) -> InitOk {
+fn handle_init(state: Arc<State>, msg: Message<Init>) -> InitOk {
+    let init = msg.body.payload;
     let mut inner = state.inner.lock().unwrap();
     inner.node_id = Some(init.node_id);
     inner.node_ids = Some(init.node_ids);
@@ -28,7 +29,8 @@ struct EchoOk {
     echo: String,
 }
 
-fn handle_echo(_: Arc<State>, echo: Echo) -> EchoOk {
+fn handle_echo(_: Arc<State>, msg: Message<Echo>) -> EchoOk {
+    let echo = msg.body.payload;
     EchoOk { echo: echo.echo }
 }
 
