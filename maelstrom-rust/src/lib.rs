@@ -40,29 +40,36 @@ pub trait Payload: Sized + Serialize + DeserializeOwned {
     fn tag() -> &'static str;
 }
 
-pub struct Router {
-    store: HashMap<&'static str, Box<dyn FnMut(RawMessage) -> RawMessage>>,
+type WrappedHandler<S> = Box<dyn FnMut(S, RawMessage) -> RawMessage>;
+
+pub struct Router<S = ()> {
+    store: HashMap<&'static str, WrappedHandler<S>>,
+    state: S,
 }
 
-impl Router {
-    pub fn new() -> Self {
+impl<S> Router<S>
+where
+    S: Clone + Send + Sync + 'static,
+{
+    pub fn new(state: S) -> Self {
         Self {
             store: HashMap::new(),
+            state,
         }
     }
 
     pub fn register<F, T, Q>(&mut self, mut handler: F)
     where
-        F: FnMut(T) -> Q + 'static,
+        F: FnMut(S, T) -> Q + 'static,
         T: Payload,
         Q: Payload,
     {
         let tag = T::tag();
-        let wrapper = Box::new(move |raw_req: RawMessage| {
+        let wrapper = Box::new(move |state: S, raw_req: RawMessage| {
             let mut raw_rep = raw_req.clone();
             let payload_req =
                 serde_json::from_value(serde_json::Value::Object(raw_req.body.payload)).unwrap();
-            let payload_rep = handler(payload_req);
+            let payload_rep = handler(state, payload_req);
             let raw_payload_rep = to_json_map(payload_rep);
             raw_rep.body.payload = raw_payload_rep;
             raw_rep
@@ -73,7 +80,7 @@ impl Router {
     fn send(&mut self, raw: RawMessage) -> RawMessage {
         let tag = &raw.body.r#type as &str;
         let wrapper = self.store.get_mut(tag).unwrap();
-        wrapper.as_mut()(raw)
+        wrapper.as_mut()(self.state.clone(), raw)
     }
 
     pub fn serve(&mut self) {
@@ -113,7 +120,7 @@ mod test {
         text: String,
     }
 
-    fn handle_echo(echo: Echo) -> EchoOk {
+    fn handle_echo(_: (), echo: Echo) -> EchoOk {
         EchoOk { text: echo.text }
     }
 
@@ -125,7 +132,7 @@ mod test {
 
     #[test]
     fn test_register() {
-        let mut reg = Router::new();
+        let mut reg = Router::new(());
         reg.register(handle_echo);
         let raw_payload = serde_json::Map::from_iter(vec![(
             "text".to_string(),
