@@ -64,7 +64,8 @@ where
         T: Payload,
         Q: Payload,
     {
-        let tag = T::tag();
+        let ttag = T::tag();
+        let qtag = Q::tag();
         let wrapper = Box::new(move |state: S, raw_req: RawMessage| {
             let mut raw_rep = raw_req.clone();
             let payload_req =
@@ -72,15 +73,20 @@ where
             let payload_rep = handler(state, payload_req);
             let raw_payload_rep = to_json_map(payload_rep);
             raw_rep.body.payload = raw_payload_rep;
+            raw_rep.body.r#type = qtag.to_string();
+            raw_rep.body.in_reply_to = raw_rep.body.msg_id;
+            raw_rep.body.msg_id = None;
+            std::mem::swap(&mut raw_rep.src, &mut raw_rep.dest);
             raw_rep
         });
-        self.store.insert(tag, wrapper);
+        self.store.insert(ttag, wrapper);
     }
 
-    fn send(&mut self, raw: RawMessage) -> RawMessage {
-        let tag = &raw.body.r#type as &str;
+    fn send(&mut self, raw_req: RawMessage) -> RawMessage {
+        let tag = &raw_req.body.r#type as &str;
         let wrapper = self.store.get_mut(tag).unwrap();
-        wrapper.as_mut()(self.state.clone(), raw)
+        let raw_rep = wrapper.as_mut()(self.state.clone(), raw_req);
+        raw_rep
     }
 
     pub fn serve(&mut self) {
